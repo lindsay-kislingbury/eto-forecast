@@ -11,7 +11,9 @@ from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 from pyfao56 import tools
 
-st.set_page_config(page_title="ETo Forecast", layout="wide")
+st.set_page_config(
+    page_title="ETo Forecast", layout="wide", initial_sidebar_state="expanded"
+)
 
 st.markdown(
     "<style>button[data-baseweb='tab'] p {font-size: 1.1rem;}</style>",
@@ -19,7 +21,7 @@ st.markdown(
 )
 
 
-# --- Model Definition (must match training notebook) ---
+# --- Model ---
 class EToLSTMAttention(nn.Module):
     def __init__(self, input_size, hidden_size, num_layers, dropout):
         super().__init__()
@@ -52,7 +54,7 @@ class EToLSTMAttention(nn.Module):
         return out.squeeze(1), attn_weights.squeeze(-1)
 
 
-# --- Load Model, Scaler, Config ---
+# --- Load Model ---
 @st.cache_resource
 def load_model():
     config = pickle.load(open("eto_model_config.pkl", "rb"))
@@ -365,15 +367,19 @@ def fetch_cimis_data():
         "day-rel-hum-max,day-rel-hum-min,day-rel-hum-avg,"
         "day-dew-pnt,day-wind-spd-avg,day-soil-tmp-avg",
     }
-    r = requests.get("https://et.water.ca.gov/api/data", params=params)
-    if r.status_code != 200:
-        st.error("CIMIS API returned status %d: %s" % (r.status_code, r.text[:300]))
-        st.stop()
-    data = r.json()
-    if "Data" not in data:
-        st.error("CIMIS API error: %s" % data.get("Message", str(data)[:200]))
-        st.stop()
-    records = data["Data"]["Providers"][0]["Records"]
+    try:
+        r = requests.get("https://et.water.ca.gov/api/data", params=params, timeout=15)
+        if r.status_code != 200:
+            print("CIMIS API status %d: %s" % (r.status_code, r.text[:300]))
+            return None
+        data = r.json()
+        if "Data" not in data:
+            print("CIMIS API error: %s" % data.get("Message", str(data)[:200]))
+            return None
+        records = data["Data"]["Providers"][0]["Records"]
+    except Exception as e:
+        print("CIMIS API exception: %s" % e)
+        return None
 
     rows = []
     for rec in records:
@@ -510,10 +516,11 @@ def backtest_recent(df):
 
 
 # ============================================================
-# Sidebar — All Inputs
+# Sidebar
 # ============================================================
 
 # --- Crop ---
+selected_crop_name = None
 with st.sidebar.container(border=True):
     st.markdown("**Crop**")
 
@@ -553,6 +560,7 @@ with st.sidebar.container(border=True):
         selected_group = st.selectbox(
             "Crop", matching_groups, index=default_idx, label_visibility="collapsed"
         )
+        selected_crop_name = selected_group
         gdata = CROP_GROUPS[selected_group]
 
         if gdata["type"] == "ground_cover":
@@ -669,6 +677,17 @@ with st.sidebar.container(border=True):
 with st.spinner("Fetching weather data from CIMIS..."):
     df = fetch_cimis_data()
 
+if df is None:
+    st.title("ETo Forecast")
+    st.caption("CIMIS Station 44 · UC Riverside")
+    with st.container(border=True):
+        st.markdown("**Weather data is currently unavailable.**")
+        st.markdown(
+            "The [CIMIS](https://cimis.water.ca.gov) API is not responding. "
+            "This is usually temporary. Please try again in a few minutes."
+        )
+    st.stop()
+
 predicted_eto, attn_weights, attn_dates = predict_tomorrow(df)
 predicted_etc = kc * predicted_eto
 water_needed = max(predicted_etc - tomorrow_precip, 0)
@@ -682,7 +701,7 @@ irrigation_needed = water_needed / efficiency if efficiency > 0 else water_neede
 st.title("ETo Forecast")
 st.caption("CIMIS Station 44 · UC Riverside")
 
-# Hero — the actionable answer, always visible
+# Hero
 with st.container(border=True):
     st.markdown(
         "<p style='margin:0; font-weight:600;'>Tomorrow's Irrigation</p>"
@@ -690,11 +709,18 @@ with st.container(border=True):
         % irrigation_needed,
         unsafe_allow_html=True,
     )
-    st.markdown(
-        "Apply %.1f L/m² of water tomorrow "
-        "to meet crop demand, accounting for %s efficiency."
-        % (irrigation_needed, efficiency_choice.lower())
+    crop_label = (
+        "%s (Kc = %.2f)" % (selected_crop_name, kc)
+        if selected_crop_name
+        else "Kc = %.2f" % kc
     )
+    st.markdown(
+        "Apply %.1f L/m² of water tomorrow for **%s**, "
+        "accounting for %s efficiency."
+        % (irrigation_needed, crop_label, efficiency_choice.lower())
+    )
+
+st.caption("Change crop, weather, or irrigation method in the sidebar.")
 
 tab_forecast, tab_model = st.tabs(["Forecast", "Model"])
 
@@ -702,7 +728,7 @@ tab_forecast, tab_model = st.tabs(["Forecast", "Model"])
 # --- Tab 1: Forecast ---
 with tab_forecast:
 
-    # Secondary metrics — the components
+    # Secondary metrics
     col1, col2, col3 = st.columns(3)
     col1.metric("Predicted ETo", "%.2f mm" % predicted_eto)
     col2.metric("Crop ET (ETc)", "%.2f mm" % predicted_etc)
@@ -713,7 +739,7 @@ with tab_forecast:
         "Default value from NWS forecast (api.weather.gov).",
     )
 
-    # Formula breakdown — readable, line by line
+    # Calculation
     with st.container(border=True):
         st.markdown("**Calculation**")
         st.code(
@@ -738,7 +764,7 @@ with tab_forecast:
 
     st.divider()
 
-    # Recent ETo chart — full width
+    # Recent ETo
     st.subheader("Recent ETo")
     st.markdown(
         "Observed ETo at Station 44 over the last 14 days. "
@@ -773,7 +799,7 @@ with tab_forecast:
 # --- Tab 2: Model ---
 with tab_model:
 
-    # 1. Prediction Pipeline
+    # Prediction Pipeline
     st.subheader("Prediction Pipeline")
     st.markdown(
         "The model takes 14 days of weather observations (temperature, humidity, "
@@ -814,7 +840,7 @@ with tab_model:
 
     st.divider()
 
-    # 2. Attention Weights
+    # Attention Weights
     st.subheader("Attention Weights")
     st.markdown(
         "The attention weights for the current prediction. Each bar shows how much "
@@ -871,7 +897,7 @@ with tab_model:
 
     st.divider()
 
-    # 3. Recent Accuracy
+    # Recent Accuracy
     st.subheader("Recent Accuracy")
     st.markdown(
         "For each of the last several days, the model is run on the preceding "
@@ -880,7 +906,20 @@ with tab_model:
 
     backtest_df = backtest_recent(df)
     if not backtest_df.empty:
-        st.line_chart(backtest_df, height=300)
+        melted = backtest_df.reset_index().melt(
+            id_vars="Date", var_name="Series", value_name="ETo (mm)"
+        )
+        accuracy_chart = (
+            alt.Chart(melted)
+            .mark_line(point=True)
+            .encode(
+                x=alt.X("Date:T", title=None),
+                y=alt.Y("ETo (mm):Q", title="ETo (mm)"),
+                color=alt.Color("Series:N"),
+            )
+            .properties(height=300)
+        )
+        st.altair_chart(accuracy_chart, use_container_width=True)
 
         errors = (backtest_df["Predicted"] - backtest_df["Actual"]).abs()
         recent_mae = errors.mean()
@@ -914,7 +953,7 @@ with tab_model:
 
     st.divider()
 
-    # 4. Architecture Details (expander)
+    # Architecture Details
     with st.expander("Architecture Details"):
         st.markdown(
             "**LSTM.** Weather is sequential. Yesterday's temperature, humidity, "
@@ -953,7 +992,7 @@ with tab_model:
             "| Test RMSE | 0.932 mm/day |"
         )
 
-    # 5. Design Decisions (expander)
+    # Design Decisions
     with st.expander("Design Decisions"):
         st.markdown(
             "Seven model variants were evaluated under the same train/val/test protocol. "
