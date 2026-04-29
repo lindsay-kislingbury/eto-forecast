@@ -8,6 +8,7 @@ import requests
 import re
 import altair as alt
 from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
 from pyfao56 import tools
 
 st.set_page_config(page_title="ETo Forecast", layout="wide")
@@ -351,7 +352,7 @@ FIELD_MAP = {
 
 @st.cache_data(ttl=3600)
 def fetch_cimis_data():
-    end = date.today()
+    end = datetime.now(ZoneInfo("America/Los_Angeles")).date()
     start = end - timedelta(days=20)
     params = {
         "appKey": CIMIS_API_KEY,
