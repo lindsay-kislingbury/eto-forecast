@@ -329,7 +329,7 @@ def adjust_kc(kc_ini, kc_mid, kc_end, hmax):
 # Data Fetching
 # ============================================================
 
-CIMIS_API_KEY = st.secrets["CIMIS_API_KEY"]
+CIMIS_API_KEY = st.secrets["CIMIS_API_KEY"].strip()
 STATION_ID = "44"
 
 FIELD_MAP = {
@@ -366,7 +366,7 @@ def fetch_cimis_data():
     }
     r = requests.get("https://et.water.ca.gov/api/data", params=params)
     if r.status_code != 200:
-        st.error("CIMIS API returned status %d" % r.status_code)
+        st.error("CIMIS API returned status %d: %s" % (r.status_code, r.text[:300]))
         st.stop()
     data = r.json()
     if "Data" not in data:
