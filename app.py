@@ -365,7 +365,14 @@ def fetch_cimis_data():
         "day-dew-pnt,day-wind-spd-avg,day-soil-tmp-avg",
     }
     r = requests.get("https://et.water.ca.gov/api/data", params=params)
-    records = r.json()["Data"]["Providers"][0]["Records"]
+    if r.status_code != 200:
+        st.error("CIMIS API returned status %d" % r.status_code)
+        st.stop()
+    data = r.json()
+    if "Data" not in data:
+        st.error("CIMIS API error: %s" % data.get("Message", str(data)[:200]))
+        st.stop()
+    records = data["Data"]["Providers"][0]["Records"]
 
     rows = []
     for rec in records:
