@@ -1,0 +1,7 @@
+#:schema false
+[theme]
+primaryColor = "#528BFF"
+backgroundColor = "#191919"
+secondaryBackgroundColor = "#202020"
+textColor = "#E8E8E8"
+font = "sans serif"
