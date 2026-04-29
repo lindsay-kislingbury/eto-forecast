@@ -722,7 +722,7 @@ with st.container(border=True):
 
 st.caption("Change crop, weather, or irrigation method in the sidebar.")
 
-tab_forecast, tab_model = st.tabs(["Forecast", "Model"])
+tab_forecast, tab_model, tab_about = st.tabs(["Forecast", "Model", "About"])
 
 
 # --- Tab 1: Forecast ---
@@ -1014,22 +1014,90 @@ with tab_model:
         )
 
 
-# About
+# --- Tab 3: About ---
+with tab_about:
+    st.markdown(
+        "Reference evapotranspiration (ETo) is the key input to irrigation planning, "
+        "but it can only be calculated from observed weather. It cannot be forecasted. "
+        "Irrigators need tomorrow's ETo today to schedule watering in advance. "
+        "This app uses an LSTM neural network trained on 22 years of CIMIS weather data "
+        "to predict next-day ETo, then converts that prediction into an irrigation "
+        "recommendation using the FAO 56 crop water requirement formula."
+    )
+
+    st.divider()
+
+    st.markdown("**Forecasting ETo**")
+    st.markdown(
+        "ETo is the amount of water that evaporates and transpires from a standard "
+        "reference surface (short grass) each day. It depends on temperature, solar "
+        "radiation, humidity, and wind speed. ETo is not specific to any crop. It "
+        "represents the atmospheric demand for water."
+    )
+    st.markdown(
+        "ETo can be calculated from observed weather, but it cannot be forecasted "
+        "from standard weather services. This app pulls the last 14 days of observed "
+        "weather from the CIMIS API (Station 44, UC Riverside) and feeds them into a "
+        "trained LSTM neural network to predict tomorrow's ETo. See the Model tab for "
+        "details on the architecture and accuracy."
+    )
+
+    st.divider()
+
+    st.markdown("**Crop Water Requirement**")
+    st.markdown(
+        "The FAO 56 standard converts ETo into a crop-specific water need using a "
+        "crop coefficient (Kc):"
+    )
+    st.code("ETc = Kc × ETo", language=None)
+    st.markdown(
+        "Kc depends on the crop type, growth stage, and canopy characteristics. "
+        "A Kc of 0.70 means the crop needs 70%% of the reference ET. Values come "
+        "from FAO Irrigation and Drainage Paper 56, Table 12, which provides Kc "
+        "for 137 crops."
+    )
+
+    st.divider()
+
+    st.markdown("**Climate Adjustment**")
+    st.markdown(
+        "The Table 12 values assume a sub-humid climate (45%% minimum relative "
+        "humidity, 2 m/s wind speed). The app adjusts Kc using FAO 56 Equation 62 "
+        "based on the station's long-term climate averages, computed from 22 years "
+        "of CIMIS weather data (mean min RH = 31.3%%, mean wind speed = 1.76 m/s). "
+        "This adjustment is applied automatically when you select a crop."
+    )
+
+    st.divider()
+
+    st.markdown("**Irrigation Calculation**")
+    st.markdown(
+        "The app pulls tomorrow's precipitation forecast from the National Weather "
+        "Service API and subtracts it from the crop water need. The result is divided "
+        "by your irrigation system's efficiency to account for water lost to "
+        "evaporation and distribution non-uniformity:"
+    )
+    st.code(
+        "Water needed = ETc - precipitation\n"
+        "Irrigation   = water needed / efficiency",
+        language=None,
+    )
+
+    st.divider()
+
+    st.markdown("**Limitations**")
+    st.markdown(
+        "This app provides a daily recommendation using the single crop coefficient "
+        "method. It does not track soil moisture or cumulative water balance over time. "
+        "The precipitation input is a forecast and should be verified after the fact."
+    )
+
+
+# Footer
 st.markdown("---")
-st.markdown("### About")
-st.markdown(
-    "Reference evapotranspiration (ETo) is the key input to irrigation planning, "
-    "but it can only be calculated from observed weather. It cannot be forecasted. "
-    "Irrigators need tomorrow's ETo today to schedule watering in advance. "
-    "This app uses an LSTM neural network trained on 22 years of CIMIS weather data "
-    "to predict next-day ETo, then converts that prediction into an irrigation "
-    "recommendation using the FAO 56 crop water requirement formula."
-)
-st.markdown(
+st.caption(
     "Lindsay Kislingbury · CS 4210 Machine Learning and Its Applications · Cal Poly Pomona  \n"
-    "  \n"
-    "Weather data: [CIMIS](https://cimis.water.ca.gov) Station 44, UC Riverside  \n"
-    "Crop coefficients: FAO Irrigation and Drainage Paper 56 via "
-    "[pyfao56](https://pypi.org/project/pyfao56/)  \n"
-    "Precipitation forecast: [National Weather Service](https://weather.gov) API"
+    "Weather data: [CIMIS](https://cimis.water.ca.gov) Station 44, UC Riverside · "
+    "Crop coefficients: FAO 56 via [pyfao56](https://pypi.org/project/pyfao56/) · "
+    "Precipitation: [National Weather Service](https://weather.gov) API"
 )
