@@ -33,6 +33,8 @@ eto-forecast/
 
 ## Run the Notebook
 
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/lindsay-kislingbury/eto-forecast/blob/main/Final_Project.ipynb)
+
 The training notebook runs in Google Colab with GPU.
 
 1. Open `Final_Project.ipynb` in Google Colab
